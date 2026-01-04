@@ -1,41 +1,29 @@
 import { RefreshCw, Plus, Mail, Copy, Clock, Inbox } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useTempMail } from '@/hooks/useTempMail';
 import { toast } from 'sonner';
-import { useState, useEffect, useCallback } from 'react';
-
-const DOMAINS = ['airsworld.net', 'tempmail.io', 'quickmail.dev'];
-const ADDRESS_EXPIRY_MINUTES = 60;
-const AUTO_REFRESH_SECONDS = 30;
-
-const generateRandomString = (length: number): string => {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-};
+import { useState } from 'react';
+import { EmailDetailModal } from '@/components/EmailDetailModal';
+import { Email } from '@/lib/supabase';
 
 const Index = () => {
-  const [currentAddress, setCurrentAddress] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [autoRefreshCountdown, setAutoRefreshCountdown] = useState(AUTO_REFRESH_SECONDS);
-  const [expiryMinutes, setExpiryMinutes] = useState(ADDRESS_EXPIRY_MINUTES);
-  const [copied, setCopied] = useState(false);
+  const {
+    currentAddress,
+    emails,
+    isLoading,
+    autoRefreshCountdown,
+    expiryMinutes,
+    generateNewAddress,
+    fetchEmails,
+    copyAddress,
+    markAsRead,
+  } = useTempMail();
 
-  const generateNewAddress = useCallback(() => {
-    setIsLoading(true);
-    const randomPart = generateRandomString(10);
-    const domain = DOMAINS[Math.floor(Math.random() * DOMAINS.length)];
-    const newAddress = `${randomPart}@${domain}`;
-    setCurrentAddress(newAddress);
-    setExpiryMinutes(ADDRESS_EXPIRY_MINUTES);
-    setIsLoading(false);
-    localStorage.setItem('tempAddress', newAddress);
-  }, []);
+  const [copied, setCopied] = useState(false);
+  const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(currentAddress);
+    copyAddress();
     setCopied(true);
     toast.success('Email address copied to clipboard');
     setTimeout(() => setCopied(false), 2000);
@@ -47,9 +35,15 @@ const Index = () => {
   };
 
   const handleRefresh = () => {
-    setIsLoading(true);
-    setTimeout(() => setIsLoading(false), 1000);
+    fetchEmails();
     toast.info('Checking for new emails...');
+  };
+
+  const handleEmailClick = (email: Email) => {
+    setSelectedEmail(email);
+    if (!email.is_read) {
+      markAsRead(email.id);
+    }
   };
 
   const formatExpiry = (mins: number) => {
@@ -58,28 +52,10 @@ const Index = () => {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
   };
 
-  // Initialize address
-  useEffect(() => {
-    const stored = localStorage.getItem('tempAddress');
-    if (stored) {
-      setCurrentAddress(stored);
-    } else {
-      generateNewAddress();
-    }
-  }, [generateNewAddress]);
-
-  // Auto-refresh countdown
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setAutoRefreshCountdown((prev) => {
-        if (prev <= 1) {
-          return AUTO_REFRESH_SECONDS;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  const formatTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#1a1714' }}>
@@ -127,7 +103,7 @@ const Index = () => {
             {/* Email Input */}
             <div className="flex-1 flex items-center gap-3 rounded-lg px-4 py-3" style={{ backgroundColor: '#1a1714', border: '1px solid #2d2a26' }}>
               <span className="font-mono text-base flex-1 truncate" style={{ color: '#e8e0d5' }}>
-                {currentAddress || 'Generating...'}
+                {currentAddress?.address || 'Generating...'}
               </span>
               <button
                 onClick={handleCopy}
@@ -181,19 +157,26 @@ const Index = () => {
 
         {/* Inbox Card */}
         <div className="rounded-xl p-6" style={{ backgroundColor: '#211e1a', border: '1px solid #2d2a26' }}>
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2.5 rounded-lg" style={{ backgroundColor: 'rgba(201, 169, 98, 0.1)', border: '1px solid rgba(201, 169, 98, 0.2)' }}>
-              <Inbox className="w-5 h-5" style={{ color: '#c9a962' }} />
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-lg" style={{ backgroundColor: 'rgba(201, 169, 98, 0.1)', border: '1px solid rgba(201, 169, 98, 0.2)' }}>
+                <Inbox className="w-5 h-5" style={{ color: '#c9a962' }} />
+              </div>
+              <h2 className="text-lg" style={{ color: '#e8e0d5', fontFamily: 'Playfair Display, serif' }}>Inbox</h2>
             </div>
-            <h2 className="text-lg" style={{ color: '#e8e0d5', fontFamily: 'Playfair Display, serif' }}>Inbox</h2>
+            {emails.length > 0 && (
+              <span className="text-sm px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(201, 169, 98, 0.2)', color: '#c9a962' }}>
+                {emails.length} {emails.length === 1 ? 'message' : 'messages'}
+              </span>
+            )}
           </div>
 
-          {isLoading ? (
+          {isLoading && emails.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
               <div className="w-12 h-12 rounded-full animate-spin mb-4" style={{ border: '2px solid rgba(201, 169, 98, 0.2)', borderTopColor: '#c9a962' }} />
               <p style={{ color: '#8a8279' }}>Checking for new messages...</p>
             </div>
-          ) : (
+          ) : emails.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="p-4 rounded-full mb-4" style={{ backgroundColor: 'rgba(45, 42, 38, 0.5)' }}>
                 <Mail className="w-8 h-8" style={{ color: '#8a8279' }} />
@@ -203,6 +186,39 @@ const Index = () => {
                 Emails sent to your address will appear here
               </p>
             </div>
+          ) : (
+            <div className="space-y-3">
+              {emails.map((email) => (
+                <div
+                  key={email.id}
+                  onClick={() => handleEmailClick(email)}
+                  className="p-4 rounded-lg cursor-pointer transition-all hover:scale-[1.01]"
+                  style={{ 
+                    backgroundColor: 'rgba(45, 42, 38, 0.3)', 
+                    border: `1px solid ${!email.is_read ? 'rgba(201, 169, 98, 0.3)' : 'rgba(45, 42, 38, 0.5)'}`,
+                    borderLeft: !email.is_read ? '3px solid #c9a962' : undefined
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium truncate" style={{ color: '#e8e0d5' }}>{email.sender}</p>
+                        {!email.is_read && (
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#c9a962' }} />
+                        )}
+                      </div>
+                      <p className="text-sm truncate mt-1" style={{ color: 'rgba(232, 224, 213, 0.8)' }}>{email.subject}</p>
+                      <p className="text-xs truncate mt-1" style={{ color: '#8a8279' }}>
+                        {email.body.substring(0, 100)}...
+                      </p>
+                    </div>
+                    <span className="text-xs shrink-0" style={{ color: '#8a8279' }}>
+                      {formatTime(email.created_at)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
@@ -211,6 +227,12 @@ const Index = () => {
           <p>Your privacy is protected. Emails are automatically deleted after expiration.</p>
         </footer>
       </div>
+
+      {/* Email Detail Modal */}
+      <EmailDetailModal
+        email={selectedEmail}
+        onClose={() => setSelectedEmail(null)}
+      />
     </div>
   );
 };

@@ -37,17 +37,13 @@ export const useTempMail = () => {
       expires_at: expiresAt.toISOString(),
     };
 
-    // Try to save to Supabase if configured
-    try {
-      const { error } = await supabase
-        .from('temp_addresses')
-        .insert([tempAddress]);
-      
-      if (error) {
-        console.log('Supabase not configured, using local storage');
-      }
-    } catch (e) {
-      console.log('Using local mode');
+    // Save to Supabase
+    const { error } = await supabase
+      .from('temp_addresses')
+      .insert([tempAddress]);
+    
+    if (error) {
+      console.error('Error creating address:', error);
     }
 
     setCurrentAddress(tempAddress);
@@ -55,7 +51,7 @@ export const useTempMail = () => {
     setExpiryMinutes(ADDRESS_EXPIRY_MINUTES);
     setIsLoading(false);
     
-    localStorage.setItem('tempAddress', JSON.stringify(tempAddress));
+    localStorage.setItem('tempAddressId', tempAddress.id);
   }, []);
 
   const fetchEmails = useCallback(async () => {
@@ -63,24 +59,34 @@ export const useTempMail = () => {
     
     setIsLoading(true);
     
-    try {
-      const { data, error } = await supabase
-        .from('emails')
-        .select('*')
-        .eq('address', currentAddress.address)
-        .order('created_at', { ascending: false });
-      
-      if (!error && data) {
-        setEmails(data);
-      }
-    } catch (e) {
-      // Supabase not configured, simulate empty inbox
-      console.log('Supabase not configured');
+    const { data, error } = await supabase
+      .from('emails')
+      .select('*')
+      .eq('address', currentAddress.address)
+      .order('created_at', { ascending: false });
+    
+    if (!error && data) {
+      setEmails(data);
+    } else if (error) {
+      console.error('Error fetching emails:', error);
     }
     
     setIsLoading(false);
     setAutoRefreshCountdown(AUTO_REFRESH_SECONDS);
   }, [currentAddress]);
+
+  const markAsRead = useCallback(async (emailId: string) => {
+    const { error } = await supabase
+      .from('emails')
+      .update({ is_read: true })
+      .eq('id', emailId);
+    
+    if (!error) {
+      setEmails(prev => prev.map(e => 
+        e.id === emailId ? { ...e, is_read: true } : e
+      ));
+    }
+  }, []);
 
   const copyAddress = useCallback(() => {
     if (currentAddress) {
@@ -90,16 +96,31 @@ export const useTempMail = () => {
 
   // Initialize or restore address
   useEffect(() => {
-    const stored = localStorage.getItem('tempAddress');
-    if (stored) {
-      const parsed = JSON.parse(stored) as TempAddress;
-      const expiresAt = new Date(parsed.expires_at);
-      if (expiresAt > new Date()) {
-        setCurrentAddress(parsed);
-        return;
+    const initAddress = async () => {
+      const storedId = localStorage.getItem('tempAddressId');
+      
+      if (storedId) {
+        // Try to fetch from Supabase
+        const { data, error } = await supabase
+          .from('temp_addresses')
+          .select('*')
+          .eq('id', storedId)
+          .maybeSingle();
+        
+        if (!error && data) {
+          const expiresAt = new Date(data.expires_at);
+          if (expiresAt > new Date()) {
+            setCurrentAddress(data);
+            return;
+          }
+        }
       }
-    }
-    generateNewAddress();
+      
+      // Generate new address if none found or expired
+      generateNewAddress();
+    };
+
+    initAddress();
   }, [generateNewAddress]);
 
   // Auto-refresh countdown
@@ -121,7 +142,7 @@ export const useTempMail = () => {
   useEffect(() => {
     if (!currentAddress) return;
 
-    const interval = setInterval(() => {
+    const updateExpiry = () => {
       const expiresAt = new Date(currentAddress.expires_at);
       const now = new Date();
       const diffMs = expiresAt.getTime() - now.getTime();
@@ -131,10 +152,38 @@ export const useTempMail = () => {
       if (diffMins <= 0) {
         generateNewAddress();
       }
-    }, 60000);
+    };
+
+    updateExpiry();
+    const interval = setInterval(updateExpiry, 60000);
 
     return () => clearInterval(interval);
   }, [currentAddress, generateNewAddress]);
+
+  // Real-time subscription for new emails
+  useEffect(() => {
+    if (!currentAddress) return;
+
+    const channel = supabase
+      .channel('emails-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'emails',
+          filter: `address=eq.${currentAddress.address}`,
+        },
+        (payload) => {
+          setEmails((prev) => [payload.new as Email, ...prev]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentAddress]);
 
   return {
     currentAddress,
@@ -145,5 +194,6 @@ export const useTempMail = () => {
     generateNewAddress,
     fetchEmails,
     copyAddress,
+    markAsRead,
   };
 };
