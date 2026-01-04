@@ -37,13 +37,15 @@ export const useTempMail = () => {
       expires_at: expiresAt.toISOString(),
     };
 
-    // Save to Supabase
-    const { error } = await supabase
-      .from('temp_addresses')
-      .insert([tempAddress]);
-    
-    if (error) {
-      console.error('Error creating address:', error);
+    // Save to Supabase if connected
+    if (supabase) {
+      const { error } = await supabase
+        .from('temp_addresses')
+        .insert([tempAddress]);
+      
+      if (error) {
+        console.error('Error creating address:', error);
+      }
     }
 
     setCurrentAddress(tempAddress);
@@ -52,6 +54,7 @@ export const useTempMail = () => {
     setIsLoading(false);
     
     localStorage.setItem('tempAddressId', tempAddress.id);
+    localStorage.setItem('tempAddress', JSON.stringify(tempAddress));
   }, []);
 
   const fetchEmails = useCallback(async () => {
@@ -59,16 +62,18 @@ export const useTempMail = () => {
     
     setIsLoading(true);
     
-    const { data, error } = await supabase
-      .from('emails')
-      .select('*')
-      .eq('address', currentAddress.address)
-      .order('created_at', { ascending: false });
-    
-    if (!error && data) {
-      setEmails(data);
-    } else if (error) {
-      console.error('Error fetching emails:', error);
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('emails')
+        .select('*')
+        .eq('address', currentAddress.address)
+        .order('created_at', { ascending: false });
+      
+      if (!error && data) {
+        setEmails(data);
+      } else if (error) {
+        console.error('Error fetching emails:', error);
+      }
     }
     
     setIsLoading(false);
@@ -76,12 +81,18 @@ export const useTempMail = () => {
   }, [currentAddress]);
 
   const markAsRead = useCallback(async (emailId: string) => {
-    const { error } = await supabase
-      .from('emails')
-      .update({ is_read: true })
-      .eq('id', emailId);
-    
-    if (!error) {
+    if (supabase) {
+      const { error } = await supabase
+        .from('emails')
+        .update({ is_read: true })
+        .eq('id', emailId);
+      
+      if (!error) {
+        setEmails(prev => prev.map(e => 
+          e.id === emailId ? { ...e, is_read: true } : e
+        ));
+      }
+    } else {
       setEmails(prev => prev.map(e => 
         e.id === emailId ? { ...e, is_read: true } : e
       ));
@@ -98,8 +109,9 @@ export const useTempMail = () => {
   useEffect(() => {
     const initAddress = async () => {
       const storedId = localStorage.getItem('tempAddressId');
+      const storedAddress = localStorage.getItem('tempAddress');
       
-      if (storedId) {
+      if (storedId && supabase) {
         // Try to fetch from Supabase
         const { data, error } = await supabase
           .from('temp_addresses')
@@ -113,6 +125,18 @@ export const useTempMail = () => {
             setCurrentAddress(data);
             return;
           }
+        }
+      } else if (storedAddress) {
+        // Fallback to local storage
+        try {
+          const parsed = JSON.parse(storedAddress) as TempAddress;
+          const expiresAt = new Date(parsed.expires_at);
+          if (expiresAt > new Date()) {
+            setCurrentAddress(parsed);
+            return;
+          }
+        } catch (e) {
+          console.error('Error parsing stored address:', e);
         }
       }
       
@@ -162,7 +186,7 @@ export const useTempMail = () => {
 
   // Real-time subscription for new emails
   useEffect(() => {
-    if (!currentAddress) return;
+    if (!currentAddress || !supabase) return;
 
     const channel = supabase
       .channel('emails-realtime')
@@ -195,5 +219,6 @@ export const useTempMail = () => {
     fetchEmails,
     copyAddress,
     markAsRead,
+    isConnected: !!supabase,
   };
 };
