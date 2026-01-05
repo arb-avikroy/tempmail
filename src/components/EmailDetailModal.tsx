@@ -1,13 +1,15 @@
 import { X, Mail, Clock, User } from 'lucide-react';
-import { Email } from '@/lib/supabase';
+import { Message } from '@/hooks/useTempMail';
 
 interface EmailDetailModalProps {
-  email: Email | null;
+  message: Message | null;
+  content: string;
+  isLoading: boolean;
   onClose: () => void;
 }
 
-export const EmailDetailModal = ({ email, onClose }: EmailDetailModalProps) => {
-  if (!email) return null;
+export const EmailDetailModal = ({ message, content, isLoading, onClose }: EmailDetailModalProps) => {
+  if (!message) return null;
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -49,7 +51,7 @@ export const EmailDetailModal = ({ email, onClose }: EmailDetailModalProps) => {
         <div className="flex-1 overflow-y-auto p-6">
           {/* Subject */}
           <h2 className="text-xl font-semibold mb-4" style={{ color: '#e8e0d5' }}>
-            {email.subject}
+            {message.subject}
           </h2>
 
           {/* Meta info */}
@@ -57,24 +59,44 @@ export const EmailDetailModal = ({ email, onClose }: EmailDetailModalProps) => {
             <div className="flex items-center gap-2">
               <User className="w-4 h-4" style={{ color: '#8a8279' }} />
               <span className="text-sm" style={{ color: '#8a8279' }}>From:</span>
-              <span className="text-sm" style={{ color: '#e8e0d5' }}>{email.sender}</span>
+              <span className="text-sm" style={{ color: '#e8e0d5' }}>{message.from}</span>
             </div>
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4" style={{ color: '#8a8279' }} />
               <span className="text-sm" style={{ color: '#8a8279' }}>Received:</span>
-              <span className="text-sm" style={{ color: '#e8e0d5' }}>{formatDate(email.created_at)}</span>
+              <span className="text-sm" style={{ color: '#e8e0d5' }}>{formatDate(message.date)}</span>
             </div>
           </div>
 
           {/* Body */}
-          <div 
-            className="prose prose-invert max-w-none"
-            style={{ color: 'rgba(232, 224, 213, 0.9)' }}
-          >
-            <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed" style={{ color: 'rgba(232, 224, 213, 0.9)' }}>
-              {email.body}
-            </pre>
-          </div>
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="w-8 h-8 rounded-full animate-spin mb-3" style={{ border: '2px solid rgba(201, 169, 98, 0.2)', borderTopColor: '#c9a962' }} />
+              <p className="text-sm" style={{ color: '#8a8279' }}>Loading message...</p>
+            </div>
+          ) : content.includes('<') && content.includes('>') ? (
+            <div 
+              className="prose prose-invert max-w-none"
+              style={{ color: 'rgba(232, 224, 213, 0.9)' }}
+            >
+              <iframe
+                srcDoc={content}
+                className="w-full min-h-[300px] rounded-lg border-0"
+                style={{ backgroundColor: '#fff' }}
+                sandbox="allow-same-origin"
+                title="Email content"
+              />
+            </div>
+          ) : (
+            <div 
+              className="prose prose-invert max-w-none"
+              style={{ color: 'rgba(232, 224, 213, 0.9)' }}
+            >
+              <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed" style={{ color: 'rgba(232, 224, 213, 0.9)' }}>
+                {content}
+              </pre>
+            </div>
+          )}
         </div>
       </div>
     </div>
