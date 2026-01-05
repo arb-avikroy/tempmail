@@ -22,3 +22,6 @@ site_url = "http://127.0.0.1:3000"
 
 [functions.receive-email]
 verify_jwt = false
+
+[functions.temp-mail]
+verify_jwt = false

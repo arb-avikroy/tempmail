@@ -1,26 +1,28 @@
-import { RefreshCw, Plus, Mail, Copy, Clock, Inbox } from 'lucide-react';
+import { RefreshCw, Mail, Copy, Clock, Inbox } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useTempMail } from '@/hooks/useTempMail';
+import { useTempMail, Message } from '@/hooks/useTempMail';
 import { toast } from 'sonner';
 import { useState } from 'react';
 import { EmailDetailModal } from '@/components/EmailDetailModal';
-import { Email } from '@/lib/supabase';
 
 const Index = () => {
   const {
-    currentAddress,
-    emails,
+    email,
+    messages,
     isLoading,
-    autoRefreshCountdown,
-    expiryMinutes,
-    generateNewAddress,
-    fetchEmails,
+    autoRefreshSeconds,
+    expirationSeconds,
+    generateNewEmail,
+    refreshInbox,
     copyAddress,
     markAsRead,
+    getMessageContent,
   } = useTempMail();
 
   const [copied, setCopied] = useState(false);
-  const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [messageContent, setMessageContent] = useState<string>('');
+  const [loadingContent, setLoadingContent] = useState(false);
 
   const handleCopy = () => {
     copyAddress();
@@ -30,23 +32,41 @@ const Index = () => {
   };
 
   const handleNewEmail = () => {
-    generateNewAddress();
+    generateNewEmail();
     toast.success('New temporary email generated');
   };
 
   const handleRefresh = () => {
-    fetchEmails();
+    refreshInbox();
     toast.info('Checking for new emails...');
   };
 
-  const handleEmailClick = (email: Email) => {
-    setSelectedEmail(email);
-    if (!email.is_read) {
-      markAsRead(email.id);
+  const handleEmailClick = async (message: Message) => {
+    setSelectedMessage(message);
+    setLoadingContent(true);
+    
+    if (!message.isRead) {
+      markAsRead(message.id);
+    }
+
+    try {
+      const content = await getMessageContent(message.id);
+      setMessageContent(content.html || content.text || '');
+    } catch (error) {
+      console.error('Failed to load message content:', error);
+      setMessageContent('Failed to load message content');
+    } finally {
+      setLoadingContent(false);
     }
   };
 
-  const formatExpiry = (mins: number) => {
+  const handleCloseModal = () => {
+    setSelectedMessage(null);
+    setMessageContent('');
+  };
+
+  const formatExpiry = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
     const h = Math.floor(mins / 60);
     const m = mins % 60;
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
@@ -103,7 +123,7 @@ const Index = () => {
             {/* Email Input */}
             <div className="flex-1 flex items-center gap-3 rounded-lg px-4 py-3" style={{ backgroundColor: '#1a1714', border: '1px solid #2d2a26' }}>
               <span className="font-mono text-base flex-1 truncate" style={{ color: '#e8e0d5' }}>
-                {currentAddress?.address || 'Generating...'}
+                {email || 'Generating...'}
               </span>
               <button
                 onClick={handleCopy}
@@ -141,11 +161,11 @@ const Index = () => {
           <div className="flex items-center justify-between mt-6 pt-4" style={{ borderTop: '1px solid rgba(45, 42, 38, 0.5)' }}>
             <div className="flex items-center gap-6">
               <span className="text-sm" style={{ color: '#8a8279' }}>
-                Auto-refresh in <span style={{ color: '#e8e0d5' }}>{autoRefreshCountdown}s</span>
+                Auto-refresh in <span style={{ color: '#e8e0d5' }}>{autoRefreshSeconds}s</span>
               </span>
               <div className="flex items-center gap-2 text-sm" style={{ color: '#8a8279' }}>
                 <Clock className="w-4 h-4" />
-                Expires in <span style={{ color: '#e8e0d5' }}>{formatExpiry(expiryMinutes)}</span>
+                Expires in <span style={{ color: '#e8e0d5' }}>{formatExpiry(expirationSeconds)}</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -164,19 +184,19 @@ const Index = () => {
               </div>
               <h2 className="text-lg" style={{ color: '#e8e0d5', fontFamily: 'Playfair Display, serif' }}>Inbox</h2>
             </div>
-            {emails.length > 0 && (
+            {messages.length > 0 && (
               <span className="text-sm px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(201, 169, 98, 0.2)', color: '#c9a962' }}>
-                {emails.length} {emails.length === 1 ? 'message' : 'messages'}
+                {messages.length} {messages.length === 1 ? 'message' : 'messages'}
               </span>
             )}
           </div>
 
-          {isLoading && emails.length === 0 ? (
+          {isLoading && messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
               <div className="w-12 h-12 rounded-full animate-spin mb-4" style={{ border: '2px solid rgba(201, 169, 98, 0.2)', borderTopColor: '#c9a962' }} />
               <p style={{ color: '#8a8279' }}>Checking for new messages...</p>
             </div>
-          ) : emails.length === 0 ? (
+          ) : messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="p-4 rounded-full mb-4" style={{ backgroundColor: 'rgba(45, 42, 38, 0.5)' }}>
                 <Mail className="w-8 h-8" style={{ color: '#8a8279' }} />
@@ -188,32 +208,32 @@ const Index = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {emails.map((email) => (
+              {messages.map((message) => (
                 <div
-                  key={email.id}
-                  onClick={() => handleEmailClick(email)}
+                  key={message.id}
+                  onClick={() => handleEmailClick(message)}
                   className="p-4 rounded-lg cursor-pointer transition-all hover:scale-[1.01]"
                   style={{ 
                     backgroundColor: 'rgba(45, 42, 38, 0.3)', 
-                    border: `1px solid ${!email.is_read ? 'rgba(201, 169, 98, 0.3)' : 'rgba(45, 42, 38, 0.5)'}`,
-                    borderLeft: !email.is_read ? '3px solid #c9a962' : undefined
+                    border: `1px solid ${!message.isRead ? 'rgba(201, 169, 98, 0.3)' : 'rgba(45, 42, 38, 0.5)'}`,
+                    borderLeft: !message.isRead ? '3px solid #c9a962' : undefined
                   }}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="font-medium truncate" style={{ color: '#e8e0d5' }}>{email.sender}</p>
-                        {!email.is_read && (
+                        <p className="font-medium truncate" style={{ color: '#e8e0d5' }}>{message.from}</p>
+                        {!message.isRead && (
                           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#c9a962' }} />
                         )}
                       </div>
-                      <p className="text-sm truncate mt-1" style={{ color: 'rgba(232, 224, 213, 0.8)' }}>{email.subject}</p>
+                      <p className="text-sm truncate mt-1" style={{ color: 'rgba(232, 224, 213, 0.8)' }}>{message.subject}</p>
                       <p className="text-xs truncate mt-1" style={{ color: '#8a8279' }}>
-                        {email.body.substring(0, 100)}...
+                        {message.preview.substring(0, 100)}...
                       </p>
                     </div>
                     <span className="text-xs shrink-0" style={{ color: '#8a8279' }}>
-                      {formatTime(email.created_at)}
+                      {formatTime(message.date)}
                     </span>
                   </div>
                 </div>
@@ -230,8 +250,10 @@ const Index = () => {
 
       {/* Email Detail Modal */}
       <EmailDetailModal
-        email={selectedEmail}
-        onClose={() => setSelectedEmail(null)}
+        message={selectedMessage}
+        content={messageContent}
+        isLoading={loadingContent}
+        onClose={handleCloseModal}
       />
     </div>
   );

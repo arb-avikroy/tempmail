@@ -1,158 +1,187 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase, Email, TempAddress } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
-const DOMAINS = ['airsworld.net', 'tempmail.io', 'quickmail.dev'];
 const ADDRESS_EXPIRY_MINUTES = 60;
 const AUTO_REFRESH_SECONDS = 30;
 
-const generateRandomString = (length: number): string => {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-};
+export interface Message {
+  id: string;
+  from: string;
+  subject: string;
+  preview: string;
+  date: string;
+  isRead: boolean;
+}
+
+interface AccountData {
+  id: string;
+  address: string;
+  token: string;
+  createdAt: string;
+}
+
+interface FullMessageContent {
+  text?: string;
+  html?: string;
+}
 
 export const useTempMail = () => {
-  const [currentAddress, setCurrentAddress] = useState<TempAddress | null>(null);
-  const [emails, setEmails] = useState<Email[]>([]);
+  const [email, setEmail] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [autoRefreshCountdown, setAutoRefreshCountdown] = useState(AUTO_REFRESH_SECONDS);
-  const [expiryMinutes, setExpiryMinutes] = useState(ADDRESS_EXPIRY_MINUTES);
+  const [autoRefreshSeconds, setAutoRefreshSeconds] = useState(AUTO_REFRESH_SECONDS);
+  const [expirationSeconds, setExpirationSeconds] = useState(ADDRESS_EXPIRY_MINUTES * 60);
+  const [accountData, setAccountData] = useState<AccountData | null>(null);
 
-  const generateNewAddress = useCallback(async () => {
+  const invokeFunction = async (action: string, params: Record<string, unknown> = {}) => {
+    if (!supabase) {
+      console.error('Supabase not connected');
+      throw new Error('Backend not connected');
+    }
+
+    const { data, error } = await supabase.functions.invoke('temp-mail', {
+      body: { action, ...params },
+    });
+
+    if (error) {
+      console.error('Function error:', error);
+      throw new Error(error.message);
+    }
+
+    if (data?.error) {
+      console.error('API error:', data.error);
+      throw new Error(data.error);
+    }
+
+    return data;
+  };
+
+  const generateNewEmail = useCallback(async () => {
     setIsLoading(true);
-    const randomPart = generateRandomString(10);
-    const domain = DOMAINS[Math.floor(Math.random() * DOMAINS.length)];
-    const newAddress = `${randomPart}@${domain}`;
+    try {
+      const data = await invokeFunction('create');
+      
+      const account: AccountData = {
+        id: data.id,
+        address: data.address,
+        token: data.token,
+        createdAt: new Date().toISOString(),
+      };
+
+      setAccountData(account);
+      setEmail(account.address);
+      setMessages([]);
+      setExpirationSeconds(ADDRESS_EXPIRY_MINUTES * 60);
+      
+      localStorage.setItem('tempMailAccount', JSON.stringify(account));
+    } catch (error) {
+      console.error('Failed to generate email:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const refreshInbox = useCallback(async () => {
+    if (!accountData?.token) return;
     
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + ADDRESS_EXPIRY_MINUTES * 60 * 1000);
+    setIsLoading(true);
+    try {
+      const data = await invokeFunction('getMessages', { token: accountData.token });
+      
+      const formattedMessages: Message[] = data.map((msg: {
+        id: string;
+        from: { address: string; name: string };
+        subject: string;
+        intro: string;
+        seen: boolean;
+        createdAt: string;
+      }) => ({
+        id: msg.id,
+        from: msg.from?.name || msg.from?.address || 'Unknown',
+        subject: msg.subject || '(No subject)',
+        preview: msg.intro || '',
+        date: msg.createdAt,
+        isRead: msg.seen,
+      }));
+      
+      setMessages(formattedMessages);
+    } catch (error) {
+      console.error('Failed to refresh inbox:', error);
+    } finally {
+      setIsLoading(false);
+      setAutoRefreshSeconds(AUTO_REFRESH_SECONDS);
+    }
+  }, [accountData?.token]);
+
+  const getMessageContent = useCallback(async (messageId: string): Promise<FullMessageContent> => {
+    if (!accountData?.token) throw new Error('Not authenticated');
     
-    const tempAddress: TempAddress = {
-      id: crypto.randomUUID(),
-      address: newAddress,
-      created_at: now.toISOString(),
-      expires_at: expiresAt.toISOString(),
+    const data = await invokeFunction('getMessage', { 
+      token: accountData.token, 
+      messageId 
+    });
+    
+    return {
+      text: data.text,
+      html: data.html?.join('') || data.text,
     };
+  }, [accountData?.token]);
 
-    // Save to Supabase if connected
-    if (supabase) {
-      const { error } = await supabase
-        .from('temp_addresses')
-        .insert([tempAddress]);
-      
-      if (error) {
-        console.error('Error creating address:', error);
-      }
-    }
-
-    setCurrentAddress(tempAddress);
-    setEmails([]);
-    setExpiryMinutes(ADDRESS_EXPIRY_MINUTES);
-    setIsLoading(false);
+  const markAsRead = useCallback(async (messageId: string) => {
+    if (!accountData?.token) return;
     
-    localStorage.setItem('tempAddressId', tempAddress.id);
-    localStorage.setItem('tempAddress', JSON.stringify(tempAddress));
-  }, []);
-
-  const fetchEmails = useCallback(async () => {
-    if (!currentAddress) return;
-    
-    setIsLoading(true);
-    
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('emails')
-        .select('*')
-        .eq('address', currentAddress.address)
-        .order('created_at', { ascending: false });
-      
-      if (!error && data) {
-        setEmails(data);
-      } else if (error) {
-        console.error('Error fetching emails:', error);
-      }
-    }
-    
-    setIsLoading(false);
-    setAutoRefreshCountdown(AUTO_REFRESH_SECONDS);
-  }, [currentAddress]);
-
-  const markAsRead = useCallback(async (emailId: string) => {
-    if (supabase) {
-      const { error } = await supabase
-        .from('emails')
-        .update({ is_read: true })
-        .eq('id', emailId);
-      
-      if (!error) {
-        setEmails(prev => prev.map(e => 
-          e.id === emailId ? { ...e, is_read: true } : e
-        ));
-      }
-    } else {
-      setEmails(prev => prev.map(e => 
-        e.id === emailId ? { ...e, is_read: true } : e
+    try {
+      await invokeFunction('markAsRead', { token: accountData.token, messageId });
+      setMessages(prev => prev.map(m => 
+        m.id === messageId ? { ...m, isRead: true } : m
       ));
+    } catch (error) {
+      console.error('Failed to mark as read:', error);
     }
-  }, []);
+  }, [accountData?.token]);
 
   const copyAddress = useCallback(() => {
-    if (currentAddress) {
-      navigator.clipboard.writeText(currentAddress.address);
+    if (email) {
+      navigator.clipboard.writeText(email);
     }
-  }, [currentAddress]);
+  }, [email]);
 
-  // Initialize or restore address
+  // Initialize or restore account
   useEffect(() => {
-    const initAddress = async () => {
-      const storedId = localStorage.getItem('tempAddressId');
-      const storedAddress = localStorage.getItem('tempAddress');
+    const initAccount = async () => {
+      const stored = localStorage.getItem('tempMailAccount');
       
-      if (storedId && supabase) {
-        // Try to fetch from Supabase
-        const { data, error } = await supabase
-          .from('temp_addresses')
-          .select('*')
-          .eq('id', storedId)
-          .maybeSingle();
-        
-        if (!error && data) {
-          const expiresAt = new Date(data.expires_at);
-          if (expiresAt > new Date()) {
-            setCurrentAddress(data);
-            return;
-          }
-        }
-      } else if (storedAddress) {
-        // Fallback to local storage
+      if (stored) {
         try {
-          const parsed = JSON.parse(storedAddress) as TempAddress;
-          const expiresAt = new Date(parsed.expires_at);
+          const parsed: AccountData = JSON.parse(stored);
+          const createdAt = new Date(parsed.createdAt);
+          const expiresAt = new Date(createdAt.getTime() + ADDRESS_EXPIRY_MINUTES * 60 * 1000);
+          
           if (expiresAt > new Date()) {
-            setCurrentAddress(parsed);
+            setAccountData(parsed);
+            setEmail(parsed.address);
             return;
           }
         } catch (e) {
-          console.error('Error parsing stored address:', e);
+          console.error('Error parsing stored account:', e);
         }
       }
       
-      // Generate new address if none found or expired
-      generateNewAddress();
+      // Generate new if none found or expired
+      await generateNewEmail();
     };
 
-    initAddress();
-  }, [generateNewAddress]);
+    initAccount();
+  }, [generateNewEmail]);
 
   // Auto-refresh countdown
   useEffect(() => {
+    if (!accountData) return;
+
     const interval = setInterval(() => {
-      setAutoRefreshCountdown((prev) => {
+      setAutoRefreshSeconds(prev => {
         if (prev <= 1) {
-          fetchEmails();
+          refreshInbox();
           return AUTO_REFRESH_SECONDS;
         }
         return prev - 1;
@@ -160,65 +189,50 @@ export const useTempMail = () => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [fetchEmails]);
+  }, [accountData, refreshInbox]);
 
-  // Expiry countdown
+  // Expiration countdown
   useEffect(() => {
-    if (!currentAddress) return;
+    if (!accountData) return;
 
     const updateExpiry = () => {
-      const expiresAt = new Date(currentAddress.expires_at);
+      const createdAt = new Date(accountData.createdAt);
+      const expiresAt = new Date(createdAt.getTime() + ADDRESS_EXPIRY_MINUTES * 60 * 1000);
       const now = new Date();
       const diffMs = expiresAt.getTime() - now.getTime();
-      const diffMins = Math.max(0, Math.ceil(diffMs / 60000));
-      setExpiryMinutes(diffMins);
+      const diffSecs = Math.max(0, Math.ceil(diffMs / 1000));
+      setExpirationSeconds(diffSecs);
 
-      if (diffMins <= 0) {
-        generateNewAddress();
+      if (diffSecs <= 0) {
+        localStorage.removeItem('tempMailAccount');
+        generateNewEmail();
       }
     };
 
     updateExpiry();
-    const interval = setInterval(updateExpiry, 60000);
+    const interval = setInterval(updateExpiry, 1000);
 
     return () => clearInterval(interval);
-  }, [currentAddress, generateNewAddress]);
+  }, [accountData, generateNewEmail]);
 
-  // Real-time subscription for new emails
+  // Initial fetch when account is set
   useEffect(() => {
-    if (!currentAddress || !supabase) return;
-
-    const channel = supabase
-      .channel('emails-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'emails',
-          filter: `address=eq.${currentAddress.address}`,
-        },
-        (payload) => {
-          setEmails((prev) => [payload.new as Email, ...prev]);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentAddress]);
+    if (accountData?.token) {
+      refreshInbox();
+    }
+  }, [accountData?.token, refreshInbox]);
 
   return {
-    currentAddress,
-    emails,
+    email,
+    messages,
     isLoading,
-    autoRefreshCountdown,
-    expiryMinutes,
-    generateNewAddress,
-    fetchEmails,
+    autoRefreshSeconds,
+    expirationSeconds,
+    generateNewEmail,
+    refreshInbox,
     copyAddress,
     markAsRead,
+    getMessageContent,
     isConnected: !!supabase,
   };
 };
