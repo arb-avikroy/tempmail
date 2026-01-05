@@ -254,8 +254,11 @@ const Index = () => {
         <footer className="text-center mt-12 text-sm" style={{ color: '#8a8279' }}>
           <p>Your privacy is protected. Emails are automatically deleted after expiration.</p>
           <p> More applications, code, experiments in the </p>
+           
           <a href="https://www.adventurousinvestorhub.com" target="_blank" rel="noopener noreferrer">
+            <p className="italic text-lg mb-4" style={{ color: '#c9a962', fontFamily: 'Playfair Display, serif' }}>
             AdventurousInvestorHub.com
+          </p>
           </a>
         </footer>
       </div>
