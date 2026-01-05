@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
 
 const ADDRESS_EXPIRY_MINUTES = 60;
 const AUTO_REFRESH_SECONDS = 30;
+const MAIL_TM_API = "https://api.mail.tm";
 
 export interface Message {
   id: string;
@@ -25,6 +25,140 @@ interface FullMessageContent {
   html?: string;
 }
 
+// Generate random string for email address
+function generateRandomString(length: number): string {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+// Get available domains from Mail.tm
+async function getDomains(): Promise<string[]> {
+  const response = await fetch(`${MAIL_TM_API}/domains`);
+  
+  if (!response.ok) {
+    throw new Error("Failed to fetch available domains");
+  }
+  
+  const data = await response.json();
+  const domains = data["hydra:member"]?.map((d: { domain: string }) => d.domain) || [];
+  return domains;
+}
+
+// Create a new Mail.tm account
+async function createAccount(): Promise<AccountData> {
+  const domains = await getDomains();
+  
+  if (domains.length === 0) {
+    throw new Error("No domains available");
+  }
+  
+  const domain = domains[0];
+  const username = generateRandomString(10);
+  const address = `${username}@${domain}`;
+  const password = generateRandomString(16);
+  
+  // Create account
+  const createResponse = await fetch(`${MAIL_TM_API}/accounts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address, password }),
+  });
+  
+  if (!createResponse.ok) {
+    throw new Error("Failed to create email account");
+  }
+  
+  const account = await createResponse.json();
+  
+  // Get auth token
+  const tokenResponse = await fetch(`${MAIL_TM_API}/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address, password }),
+  });
+  
+  if (!tokenResponse.ok) {
+    throw new Error("Failed to authenticate");
+  }
+  
+  const tokenData = await tokenResponse.json();
+  
+  return {
+    id: account.id,
+    address: account.address,
+    token: tokenData.token,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+// Get messages for an account
+async function getMessages(token: string): Promise<Message[]> {
+  const response = await fetch(`${MAIL_TM_API}/messages`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  if (!response.ok) {
+    throw new Error("Failed to fetch messages");
+  }
+  
+  const data = await response.json();
+  const messages = data["hydra:member"] || [];
+  
+  return messages.map((msg: {
+    id: string;
+    from: { address: string; name: string };
+    subject: string;
+    intro: string;
+    seen: boolean;
+    createdAt: string;
+  }) => ({
+    id: msg.id,
+    from: msg.from?.name || msg.from?.address || 'Unknown',
+    subject: msg.subject || '(No subject)',
+    preview: msg.intro || '',
+    date: msg.createdAt,
+    isRead: msg.seen,
+  }));
+}
+
+// Get full message content
+async function getMessage(token: string, messageId: string): Promise<FullMessageContent> {
+  const response = await fetch(`${MAIL_TM_API}/messages/${messageId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  if (!response.ok) {
+    throw new Error("Failed to fetch message");
+  }
+  
+  const message = await response.json();
+  
+  return {
+    text: message.text,
+    html: message.html?.join('') || message.text,
+  };
+}
+
+// Mark message as read
+async function markMessageAsRead(token: string, messageId: string): Promise<void> {
+  const response = await fetch(`${MAIL_TM_API}/messages/${messageId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/merge-patch+json",
+    },
+    body: JSON.stringify({ seen: true }),
+  });
+  
+  if (!response.ok) {
+    throw new Error("Failed to mark message as read");
+  }
+}
+
 export const useTempMail = () => {
   const [email, setEmail] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -33,41 +167,11 @@ export const useTempMail = () => {
   const [expirationSeconds, setExpirationSeconds] = useState(ADDRESS_EXPIRY_MINUTES * 60);
   const [accountData, setAccountData] = useState<AccountData | null>(null);
 
-  const invokeFunction = async (action: string, params: Record<string, unknown> = {}) => {
-    if (!supabase) {
-      console.error('Supabase not connected');
-      throw new Error('Backend not connected');
-    }
-
-    const { data, error } = await supabase.functions.invoke('temp-mail', {
-      body: { action, ...params },
-    });
-
-    if (error) {
-      console.error('Function error:', error);
-      throw new Error(error.message);
-    }
-
-    if (data?.error) {
-      console.error('API error:', data.error);
-      throw new Error(data.error);
-    }
-
-    return data;
-  };
-
   const generateNewEmail = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await invokeFunction('create');
+      const account = await createAccount();
       
-      const account: AccountData = {
-        id: data.id,
-        address: data.address,
-        token: data.token,
-        createdAt: new Date().toISOString(),
-      };
-
       setAccountData(account);
       setEmail(account.address);
       setMessages([]);
@@ -86,24 +190,7 @@ export const useTempMail = () => {
     
     setIsLoading(true);
     try {
-      const data = await invokeFunction('getMessages', { token: accountData.token });
-      
-      const formattedMessages: Message[] = data.map((msg: {
-        id: string;
-        from: { address: string; name: string };
-        subject: string;
-        intro: string;
-        seen: boolean;
-        createdAt: string;
-      }) => ({
-        id: msg.id,
-        from: msg.from?.name || msg.from?.address || 'Unknown',
-        subject: msg.subject || '(No subject)',
-        preview: msg.intro || '',
-        date: msg.createdAt,
-        isRead: msg.seen,
-      }));
-      
+      const formattedMessages = await getMessages(accountData.token);
       setMessages(formattedMessages);
     } catch (error) {
       console.error('Failed to refresh inbox:', error);
@@ -116,22 +203,14 @@ export const useTempMail = () => {
   const getMessageContent = useCallback(async (messageId: string): Promise<FullMessageContent> => {
     if (!accountData?.token) throw new Error('Not authenticated');
     
-    const data = await invokeFunction('getMessage', { 
-      token: accountData.token, 
-      messageId 
-    });
-    
-    return {
-      text: data.text,
-      html: data.html?.join('') || data.text,
-    };
+    return await getMessage(accountData.token, messageId);
   }, [accountData?.token]);
 
   const markAsRead = useCallback(async (messageId: string) => {
     if (!accountData?.token) return;
     
     try {
-      await invokeFunction('markAsRead', { token: accountData.token, messageId });
+      await markMessageAsRead(accountData.token, messageId);
       setMessages(prev => prev.map(m => 
         m.id === messageId ? { ...m, isRead: true } : m
       ));
@@ -233,6 +312,6 @@ export const useTempMail = () => {
     copyAddress,
     markAsRead,
     getMessageContent,
-    isConnected: !!supabase,
+    isConnected: true, // Always connected since we're using direct API calls
   };
 };

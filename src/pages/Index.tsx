@@ -44,7 +44,7 @@ const Index = () => {
   const handleEmailClick = async (message: Message) => {
     setSelectedMessage(message);
     setLoadingContent(true);
-    
+
     if (!message.isRead) {
       markAsRead(message.id);
     }
@@ -85,14 +85,22 @@ const Index = () => {
           <p className="italic text-lg mb-4" style={{ color: '#c9a962', fontFamily: 'Playfair Display, serif' }}>
             your privacy matters...
           </p>
+          {/* <<p className="text-lg max-w-xl mx-auto" style={{ color: '#8a8279' }}>
+           AdventurousInvestorHub's
+          </p> */}
+          <p className="text-lg max-w-xl mx-auto">
+            <a href="https://www.adventurousinvestorhub.com" target="_blank" rel="noopener noreferrer">
+              AdventurousInvestorHub's
+            </a>
+          </p>
           <h1 className="text-5xl md:text-6xl font-semibold mb-6" style={{ fontFamily: 'Playfair Display, serif' }}>
-            <span style={{ color: '#e8e0d5' }}>Temp</span>
-            <span style={{ color: '#c9a962' }}>Mail</span>
+            <span style={{ color: '#e8e0d5' }}>TempMail</span>
+            <span style={{ color: '#c9a962' }}> Insta</span>
           </h1>
           <p className="text-lg max-w-xl mx-auto" style={{ color: '#8a8279' }}>
             Instant disposable email addresses. Protect your privacy from spam and unwanted emails.
           </p>
-          
+
           {/* Feature badges */}
           <div className="flex items-center justify-center gap-8 mt-8">
             <div className="flex items-center gap-2">
@@ -213,8 +221,8 @@ const Index = () => {
                   key={message.id}
                   onClick={() => handleEmailClick(message)}
                   className="p-4 rounded-lg cursor-pointer transition-all hover:scale-[1.01]"
-                  style={{ 
-                    backgroundColor: 'rgba(45, 42, 38, 0.3)', 
+                  style={{
+                    backgroundColor: 'rgba(45, 42, 38, 0.3)',
                     border: `1px solid ${!message.isRead ? 'rgba(201, 169, 98, 0.3)' : 'rgba(45, 42, 38, 0.5)'}`,
                     borderLeft: !message.isRead ? '3px solid #c9a962' : undefined
                   }}
@@ -245,6 +253,10 @@ const Index = () => {
         {/* Footer */}
         <footer className="text-center mt-12 text-sm" style={{ color: '#8a8279' }}>
           <p>Your privacy is protected. Emails are automatically deleted after expiration.</p>
+          <p> More applications, code, experiments in the </p>
+          <a href="https://www.adventurousinvestorhub.com" target="_blank" rel="noopener noreferrer">
+            AdventurousInvestorHub.com
+          </a>
         </footer>
       </div>
 
