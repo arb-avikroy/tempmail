@@ -176,22 +176,9 @@ const Index = () => {
                 Expires in <span style={{ color: '#e8e0d5' }}>{formatExpiry(expirationSeconds)}</span>
               </div>
             </div>
-            {/* <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#10b981' }} />
               <span className="text-sm" style={{ color: '#10b981' }}>Active</span>
-            </div> */}
-
-            <div className="flex items-center gap-2">
-              <span
-                className="w-2 h-2 rounded-full animate-pulse"
-                style={{ backgroundColor: email ? '#10b981' : '#6b7280' }}
-              />
-              <span
-                className="text-sm"
-                style={{ color: email ? '#10b981' : '#6b7280' }}
-              >
-                {email ? 'Active' : 'Service Unavailable. Please come back later'}
-              </span>
             </div>
           </div>
         </div>
@@ -267,11 +254,11 @@ const Index = () => {
         <footer className="text-center mt-12 text-sm" style={{ color: '#8a8279' }}>
           <p>Your privacy is protected. Emails are automatically deleted after expiration.</p>
           <p> More applications, code, experiments in the </p>
-
+           
           <a href="https://www.adventurousinvestorhub.com" target="_blank" rel="noopener noreferrer">
             <p className="italic text-lg mb-4" style={{ color: '#c9a962', fontFamily: 'Playfair Display, serif' }}>
-              AdventurousInvestorHub.com
-            </p>
+            AdventurousInvestorHub.com
+          </p>
           </a>
         </footer>
       </div>

@@ -2,9 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 
 const ADDRESS_EXPIRY_MINUTES = 60;
 const AUTO_REFRESH_SECONDS = 30;
-// const MAIL_TM_API = "https://corsproxy.io/?https://api.mail.tm";
-const SUPABASE_FUNCTION_URL = import.meta.env.VITE_SUPABASE_FUNCTION_URL || 
-  "http://localhost:54321/functions/v1/mail-proxy";
+const MAIL_TM_API = "https://api.mail.tm";
 
 export interface Message {
   id: string;
@@ -38,19 +36,8 @@ function generateRandomString(length: number): string {
 }
 
 // Get available domains from Mail.tm
-// async function getDomains(): Promise<string[]> {
-//   const response = await fetch(`${MAIL_TM_API}/domains`);
-  
-//   if (!response.ok) {
-//     throw new Error("Failed to fetch available domains");
-//   }
-  
-//   const data = await response.json();
-//   const domains = data["hydra:member"]?.map((d: { domain: string }) => d.domain) || [];
-//   return domains;
-// }
 async function getDomains(): Promise<string[]> {
-  const response = await fetch(`${SUPABASE_FUNCTION_URL}?path=domains`);
+  const response = await fetch(`${MAIL_TM_API}/domains`);
   
   if (!response.ok) {
     throw new Error("Failed to fetch available domains");
@@ -62,17 +49,6 @@ async function getDomains(): Promise<string[]> {
 }
 
 // Create a new Mail.tm account
-// async function createAccount(): Promise<AccountData> {
-//   const domains = await getDomains();
-  
-//   if (domains.length === 0) {
-//     throw new Error("No domains available");
-//   }
-  
-//   const domain = domains[0];
-//   const username = generateRandomString(10);
-//   const address = `${username}@${domain}`;
-//   const password = generateRandomString(16);
 async function createAccount(): Promise<AccountData> {
   const domains = await getDomains();
   
@@ -86,7 +62,7 @@ async function createAccount(): Promise<AccountData> {
   const password = generateRandomString(16);
   
   // Create account
-  const createResponse = await fetch(`${SUPABASE_FUNCTION_URL}/accounts`, {
+  const createResponse = await fetch(`${MAIL_TM_API}/accounts`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ address, password }),
@@ -99,7 +75,7 @@ async function createAccount(): Promise<AccountData> {
   const account = await createResponse.json();
   
   // Get auth token
-  const tokenResponse = await fetch(`${SUPABASE_FUNCTION_URL}/token`, {
+  const tokenResponse = await fetch(`${MAIL_TM_API}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ address, password }),
@@ -121,7 +97,7 @@ async function createAccount(): Promise<AccountData> {
 
 // Get messages for an account
 async function getMessages(token: string): Promise<Message[]> {
-  const response = await fetch(`${SUPABASE_FUNCTION_URL}/messages`, {
+  const response = await fetch(`${MAIL_TM_API}/messages`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   
@@ -151,7 +127,7 @@ async function getMessages(token: string): Promise<Message[]> {
 
 // Get full message content
 async function getMessage(token: string, messageId: string): Promise<FullMessageContent> {
-  const response = await fetch(`${SUPABASE_FUNCTION_URL}/messages/${messageId}`, {
+  const response = await fetch(`${MAIL_TM_API}/messages/${messageId}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   
@@ -169,7 +145,7 @@ async function getMessage(token: string, messageId: string): Promise<FullMessage
 
 // Mark message as read
 async function markMessageAsRead(token: string, messageId: string): Promise<void> {
-  const response = await fetch(`${SUPABASE_FUNCTION_URL}/messages/${messageId}`, {
+  const response = await fetch(`${MAIL_TM_API}/messages/${messageId}`, {
     method: "PATCH",
     headers: {
       Authorization: `Bearer ${token}`,
