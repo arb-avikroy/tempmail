@@ -1,11 +1,19 @@
-import { RefreshCw, Mail, Copy, Clock, Inbox } from 'lucide-react';
+import { RefreshCw, Mail, Copy, Clock, Inbox, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTempMail, Message } from '@/hooks/useTempMail';
+import { useYopMail } from '@/hooks/useYopMail';
 import { toast } from 'sonner';
 import { useState } from 'react';
 import { EmailDetailModal } from '@/components/EmailDetailModal';
 
 const Index = () => {
+  const [version, setVersion] = useState<'v1' | 'v2'>(() => {
+    return (localStorage.getItem('tempmail-version') as 'v1' | 'v2') || 'v1';
+  });
+
+  const mailTmHook = useTempMail();
+  const yopMailHook = useYopMail();
+
   const {
     email,
     messages,
@@ -17,12 +25,21 @@ const Index = () => {
     copyAddress,
     markAsRead,
     getMessageContent,
-  } = useTempMail();
+  } = version === 'v1' ? mailTmHook : yopMailHook;
+
+  const yopmailUrl = version === 'v2' ? (yopMailHook as any).yopmailUrl : '';
+  const openInbox = version === 'v2' ? (yopMailHook as any).openInbox : null;
 
   const [copied, setCopied] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [messageContent, setMessageContent] = useState<string>('');
   const [loadingContent, setLoadingContent] = useState(false);
+
+  const switchVersion = (newVersion: 'v1' | 'v2') => {
+    setVersion(newVersion);
+    localStorage.setItem('tempmail-version', newVersion);
+    toast.success(`Switched to ${newVersion === 'v1' ? 'Mail.tm' : 'YopMail'}`);
+  };
 
   const handleCopy = () => {
     copyAddress();
@@ -101,6 +118,38 @@ const Index = () => {
             Instant disposable email addresses. Protect your privacy from spam and unwanted emails.
           </p>
 
+          {/* Version Switcher */}
+          <div className="flex items-center justify-center gap-3 mt-6 mb-4">
+            <button
+              onClick={() => switchVersion('v1')}
+              className={`px-4 py-2 rounded-lg transition-all ${version === 'v1' ? 'font-medium' : 'opacity-60 hover:opacity-80'}`}
+              style={{
+                backgroundColor: version === 'v1' ? '#c9a962' : '#2d2a26',
+                color: version === 'v1' ? '#1a1714' : '#e8e0d5',
+                border: version === 'v1' ? 'none' : '1px solid rgba(45, 42, 38, 0.5)'
+              }}
+            >
+              V1: Mail.tm
+            </button>
+            <button
+              onClick={() => switchVersion('v2')}
+              className={`px-4 py-2 rounded-lg transition-all ${version === 'v2' ? 'font-medium' : 'opacity-60 hover:opacity-80'}`}
+              style={{
+                backgroundColor: version === 'v2' ? '#c9a962' : '#2d2a26',
+                color: version === 'v2' ? '#1a1714' : '#e8e0d5',
+                border: version === 'v2' ? 'none' : '1px solid rgba(45, 42, 38, 0.5)'
+              }}
+            >
+              V2: YopMail
+            </button>
+          </div>
+
+          {version === 'v2' && (
+            <p className="text-sm mt-2 px-4 py-2 rounded-lg" style={{ color: '#8a8279', backgroundColor: 'rgba(201, 169, 98, 0.1)' }}>
+              ⚠️ YopMail emails are checked directly on their website. Click "Open Inbox" to view emails.
+            </p>
+          )}
+
           {/* Feature badges */}
           <div className="flex items-center justify-center gap-8 mt-8">
             <div className="flex items-center gap-2">
@@ -143,24 +192,38 @@ const Index = () => {
             </div>
 
             {/* Actions */}
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                onClick={handleRefresh}
-                disabled={isLoading}
-                className="hover:opacity-80"
-                style={{ backgroundColor: '#2d2a26', color: '#e8e0d5', border: 'none' }}
-              >
-                <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
+            <div className="flex flex-wrap gap-2">
+              {version === 'v2' && yopmailUrl && (
+                <Button
+                  variant="secondary"
+                  onClick={openInbox}
+                  className="hover:opacity-90 flex-shrink-0"
+                  style={{ backgroundColor: '#10b981', color: '#fff', border: 'none' }}
+                >
+                  <ExternalLink className="w-4 h-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Open Inbox</span>
+                </Button>
+              )}
+              {version === 'v1' && (
+                <Button
+                  variant="secondary"
+                  onClick={handleRefresh}
+                  disabled={isLoading}
+                  className="hover:opacity-80 flex-shrink-0"
+                  style={{ backgroundColor: '#2d2a26', color: '#e8e0d5', border: 'none' }}
+                >
+                  <RefreshCw className={`w-4 h-4 sm:mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">Refresh</span>
+                </Button>
+              )}
               <Button
                 onClick={handleNewEmail}
                 disabled={isLoading}
-                className="hover:opacity-90"
+                className="hover:opacity-90 flex-shrink-0"
                 style={{ backgroundColor: '#c9a962', color: '#1a1714' }}
               >
-                New Email
+                <span className="hidden sm:inline">New Email</span>
+                <span className="sm:hidden">New</span>
               </Button>
             </div>
           </div>
@@ -168,13 +231,22 @@ const Index = () => {
           {/* Status Row */}
           <div className="flex items-center justify-between mt-6 pt-4" style={{ borderTop: '1px solid rgba(45, 42, 38, 0.5)' }}>
             <div className="flex items-center gap-6">
-              <span className="text-sm" style={{ color: '#8a8279' }}>
-                Auto-refresh in <span style={{ color: '#e8e0d5' }}>{autoRefreshSeconds}s</span>
-              </span>
-              <div className="flex items-center gap-2 text-sm" style={{ color: '#8a8279' }}>
-                <Clock className="w-4 h-4" />
-                Expires in <span style={{ color: '#e8e0d5' }}>{formatExpiry(expirationSeconds)}</span>
-              </div>
+              {version === 'v1' && (
+                <>
+                  <span className="text-sm" style={{ color: '#8a8279' }}>
+                    Auto-refresh in <span style={{ color: '#e8e0d5' }}>{autoRefreshSeconds}s</span>
+                  </span>
+                  <div className="flex items-center gap-2 text-sm" style={{ color: '#8a8279' }}>
+                    <Clock className="w-4 h-4" />
+                    Expires in <span style={{ color: '#e8e0d5' }}>{formatExpiry(expirationSeconds)}</span>
+                  </div>
+                </>
+              )}
+              {version === 'v2' && (
+                <div className="flex items-center gap-2 text-sm" style={{ color: '#8a8279' }}>
+                  <span style={{ color: '#10b981' }}>✓ No expiration</span>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#10b981' }} />
@@ -184,6 +256,7 @@ const Index = () => {
         </div>
 
         {/* Inbox Card */}
+        {version === 'v1' && (
         <div className="rounded-xl p-6" style={{ backgroundColor: '#211e1a', border: '1px solid #2d2a26' }}>
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
@@ -249,6 +322,7 @@ const Index = () => {
             </div>
           )}
         </div>
+        )}
 
         {/* Footer */}
         <footer className="text-center mt-12 text-sm" style={{ color: '#8a8279' }}>
