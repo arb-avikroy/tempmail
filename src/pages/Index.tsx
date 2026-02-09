@@ -358,19 +358,8 @@ const Index = () => {
               )}
             </div>
             <div className="flex items-center gap-2">
-              {version === 'v1' ? (
-                <>
-                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#10b981' }} />
-                  <span className="text-sm" style={{ color: '#10b981' }}>Active</span>
-                </>
-              ) : (
-                <>
-                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: isLiveV2 ? '#10b981' : '#ef4444' }} />
-                  <span className="text-sm" style={{ color: isLiveV2 ? '#10b981' : '#ef4444' }}>
-                    {isLiveV2 ? 'Active' : 'Server Down'}
-                  </span>
-                </>
-              )}
+              <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#10b981' }} />
+              <span className="text-sm" style={{ color: '#10b981' }}>Active</span>
             </div>
           </div>
         </div>
