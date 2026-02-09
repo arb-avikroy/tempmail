@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head><title>Clear Cache</title></head>
+<body>
+<h1>Clear YopMail Cache</h1>
+<button onclick="localStorage.removeItem('yopmail_domains_cache'); alert('Cache cleared! Reload your app.')">Clear Cache</button>
+<button onclick="console.log(localStorage.getItem('yopmail_domains_cache'))">Show Cache</button>
+<pre id="output"></pre>
+<script>
+document.querySelector('button:nth-of-type(2)').addEventListener('click', () => {
+  const cache = localStorage.getItem('yopmail_domains_cache');
+  document.getElementById('output').textContent = cache || 'No cache found';
+});
+</script>
+</body>
+</html>

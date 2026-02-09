@@ -63,6 +63,7 @@ interface DomainCache {
   newDomain: string | null;
   otherDomains: string[];
   lastFetched: string; // ISO date string
+  isLive: boolean; // Whether domains are from live API or fallback
 }
 
 const CACHE_KEY = 'yopmail_domains_cache';
@@ -108,7 +109,7 @@ function parseDomains(html: string): { domains: string[]; newDomain: string | nu
  * PRIORITY 1: Always tries to fetch live data from YopMail first
  * PRIORITY 2: Falls back to day-of-year rotation only if fetch fails
  */
-async function fetchDomains(): Promise<{ domains: string[]; newDomain: string | null; otherDomains: string[] }> {
+async function fetchDomains(): Promise<{ domains: string[]; newDomain: string | null; otherDomains: string[]; isLive: boolean }> {
   // STEP 1: Attempt to fetch live domains from YopMail
   try {
     const response = await fetch(DOMAIN_API_URL);
@@ -122,7 +123,7 @@ async function fetchDomains(): Promise<{ domains: string[]; newDomain: string | 
     
     // If parsing succeeded, return parsed data
     if (parsed.domains.length > 0 && parsed.newDomain) {
-      return parsed;
+      return { ...parsed, isLive: true };
     }
     
     // Otherwise fall back to rotation logic
@@ -151,7 +152,8 @@ async function fetchDomains(): Promise<{ domains: string[]; newDomain: string | 
     return { 
       domains: rotatedDomains, 
       newDomain,
-      otherDomains
+      otherDomains,
+      isLive: false
     };
   }
 }
@@ -159,7 +161,7 @@ async function fetchDomains(): Promise<{ domains: string[]; newDomain: string | 
 /**
  * Get cached domains or fetch new ones if cache is stale
  */
-export async function getYopMailDomains(forceRefresh = false): Promise<string[]> {
+export async function getYopMailDomains(forceRefresh = false): Promise<{ domains: string[]; isLive: boolean }> {
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   
   if (!forceRefresh) {
@@ -167,18 +169,18 @@ export async function getYopMailDomains(forceRefresh = false): Promise<string[]>
       const cached = localStorage.getItem(CACHE_KEY);
       if (cached) {
         const cache: DomainCache = JSON.parse(cached);
-        // Return cached domains if they were fetched today
-        if (cache.lastFetched === today && cache.domains.length > 0) {
-          return cache.domains;
+        // Return cached domains if they were fetched today and have isLive field
+        if (cache.lastFetched === today && cache.domains.length > 0 && cache.isLive !== undefined) {
+          return { domains: cache.domains, isLive: cache.isLive };
         }
       }
     } catch (error) {
-      // Silent fail
+      // Silent fail - will fetch fresh data
     }
   }
 
   // Fetch fresh domains
-  const { domains, newDomain, otherDomains } = await fetchDomains();
+  const { domains, newDomain, otherDomains, isLive } = await fetchDomains();
   
   // Cache the result
   try {
@@ -187,35 +189,36 @@ export async function getYopMailDomains(forceRefresh = false): Promise<string[]>
       newDomain,
       otherDomains,
       lastFetched: today,
+      isLive,
     };
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
   } catch (error) {
     // Silent fail
   }
 
-  return domains;
+  return { domains, isLive };
 }
 
 /**
  * Get today's featured domain (the "New" domain that rotates daily)
  */
-export async function getTodaysDomain(): Promise<string> {
+export async function getTodaysDomain(): Promise<{ domain: string; isLive: boolean }> {
   const today = new Date().toISOString().split('T')[0];
   
   try {
     const cached = localStorage.getItem(CACHE_KEY);
     if (cached) {
       const cache: DomainCache = JSON.parse(cached);
-      if (cache.lastFetched === today && cache.newDomain) {
-        return cache.newDomain;
+      if (cache.lastFetched === today && cache.newDomain && cache.isLive !== undefined) {
+        return { domain: cache.newDomain, isLive: cache.isLive };
       }
     }
   } catch (error) {
-    // Silent fail
+    // Silent fail - will fetch fresh data
   }
 
   // Fetch fresh domains to get today's new domain
-  const { domains, newDomain, otherDomains } = await fetchDomains();
+  const { domains, newDomain, otherDomains, isLive } = await fetchDomains();
   
   // Cache the result
   try {
@@ -224,6 +227,7 @@ export async function getTodaysDomain(): Promise<string> {
       newDomain,
       otherDomains,
       lastFetched: today,
+      isLive,
     };
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
   } catch (error) {
@@ -231,7 +235,7 @@ export async function getTodaysDomain(): Promise<string> {
   }
 
   // Return the new domain if available, otherwise use first from rotated list
-  return newDomain || ALL_YOPMAIL_DOMAINS[0];
+  return { domain: newDomain || ALL_YOPMAIL_DOMAINS[0], isLive };
 }
 
 /**

@@ -42,6 +42,7 @@ const Index = () => {
   const selectedDomain = version === 'v2' ? (yopMailHook as any).selectedDomain : null;
   const availableDomains = version === 'v2' ? (yopMailHook as any).availableDomains : [];
   const changeDomain = version === 'v2' ? (yopMailHook as any).changeDomain : null;
+  const isLiveV2 = version === 'v2' ? (yopMailHook as any).isLive : true;
 
   const [copied, setCopied] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
@@ -357,8 +358,19 @@ const Index = () => {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#10b981' }} />
-              <span className="text-sm" style={{ color: '#10b981' }}>Active</span>
+              {version === 'v1' ? (
+                <>
+                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#10b981' }} />
+                  <span className="text-sm" style={{ color: '#10b981' }}>Active</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: isLiveV2 ? '#10b981' : '#ef4444' }} />
+                  <span className="text-sm" style={{ color: isLiveV2 ? '#10b981' : '#ef4444' }}>
+                    {isLiveV2 ? 'Active' : 'Server Down'}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>

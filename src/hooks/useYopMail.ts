@@ -48,6 +48,7 @@ export const useYopMail = () => {
   const [alternateEmail, setAlternateEmail] = useState<string | null>(null);
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
   const [availableDomains, setAvailableDomains] = useState<string[]>([]);
+  const [isLive, setIsLive] = useState<boolean>(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [autoRefreshSeconds, setAutoRefreshSeconds] = useState(AUTO_REFRESH_SECONDS);
@@ -58,11 +59,12 @@ export const useYopMail = () => {
     setEmail(newEmail);
     
     // Fetch today's featured domain for alternate email
-    const todayDomain = await getTodaysDomain();
+    const { domain: todayDomain, isLive: liveStatus } = await getTodaysDomain();
     const username = newEmail.split('@')[0];
     const altEmail = `${username}@${todayDomain}`;
     setAlternateEmail(altEmail);
     setSelectedDomain(todayDomain);
+    setIsLive(liveStatus);
     
     setMessages([]);
     setYopmailUrl(getYopMailInboxUrl(newEmail));
@@ -145,8 +147,9 @@ export const useYopMail = () => {
   // Fetch available domains on mount
   useEffect(() => {
     const fetchDomains = async () => {
-      const domains = await getYopMailDomains();
+      const { domains, isLive: liveStatus } = await getYopMailDomains();
       setAvailableDomains(domains);
+      setIsLive(liveStatus);
     };
     fetchDomains();
   }, []);
@@ -162,10 +165,11 @@ export const useYopMail = () => {
         
         // Generate alternate email for stored address
         const username = stored.split('@')[0];
-        const todayDomain = await getTodaysDomain();
+        const { domain: todayDomain, isLive: liveStatus } = await getTodaysDomain();
         const altEmail = `${username}@${todayDomain}`;
         setAlternateEmail(altEmail);
         setSelectedDomain(todayDomain);
+        setIsLive(liveStatus);
       } else {
         generateNewEmail();
       }
@@ -203,6 +207,7 @@ export const useYopMail = () => {
     alternateEmail,
     selectedDomain,
     availableDomains,
+    isLive,
     messages,
     isLoading,
     autoRefreshSeconds,
