@@ -1,23 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import { getTodaysDomain, getYopMailDomains } from '@/lib/yopmailDomains';
 
 const AUTO_REFRESH_SECONDS = 30;
-
-// YopMail rotates domains regularly. These are common ones
-const YOPMAIL_DOMAINS = [
-  'yopmail.com',
-  'yopmail.net',
-  'cool.fr.nf',
-  'jetable.fr.nf',
-  'nospam.ze.tc',
-  'nomail.xl.cx',
-  'mega.zik.dj',
-  'speed.1s.fr',
-  'courriel.fr.nf',
-  'moncourrier.fr.nf',
-  'monmail.fr.nf',
-  'hide.biz.st',
-  'mymail.infos.st',
-];
 
 export interface Message {
   id: string;
@@ -47,11 +31,10 @@ function generateRandomString(length: number): string {
   return result;
 }
 
-// Generate a new YopMail email address
+// Generate a new YopMail email address (always use yopmail.com for main address)
 function generateYopMailAddress(): string {
   const username = generateRandomString(10);
-  const domain = YOPMAIL_DOMAINS[Math.floor(Math.random() * YOPMAIL_DOMAINS.length)];
-  return `${username}@${domain}`;
+  return `${username}@yopmail.com`;
 }
 
 // Get the YopMail inbox URL for viewing in iframe or new tab
@@ -62,19 +45,39 @@ function getYopMailInboxUrl(email: string): string {
 
 export const useYopMail = () => {
   const [email, setEmail] = useState<string | null>(null);
+  const [alternateEmail, setAlternateEmail] = useState<string | null>(null);
+  const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
+  const [availableDomains, setAvailableDomains] = useState<string[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [autoRefreshSeconds, setAutoRefreshSeconds] = useState(AUTO_REFRESH_SECONDS);
   const [yopmailUrl, setYopmailUrl] = useState<string>('');
 
-  const generateNewEmail = useCallback(() => {
+  const generateNewEmail = useCallback(async () => {
     const newEmail = generateYopMailAddress();
     setEmail(newEmail);
+    
+    // Fetch today's featured domain for alternate email
+    const todayDomain = await getTodaysDomain();
+    const username = newEmail.split('@')[0];
+    const altEmail = `${username}@${todayDomain}`;
+    setAlternateEmail(altEmail);
+    setSelectedDomain(todayDomain);
+    
     setMessages([]);
     setYopmailUrl(getYopMailInboxUrl(newEmail));
     
     localStorage.setItem('yopmailAddress', newEmail);
   }, []);
+
+  const changeDomain = useCallback((domain: string) => {
+    if (email) {
+      const username = email.split('@')[0];
+      const altEmail = `${username}@${domain}`;
+      setAlternateEmail(altEmail);
+      setSelectedDomain(domain);
+    }
+  }, [email]);
 
   // Since YopMail doesn't have a public API, we'll use a placeholder for messages
   // Users will need to check emails directly on YopMail website
@@ -139,16 +142,36 @@ export const useYopMail = () => {
     }
   }, [yopmailUrl]);
 
+  // Fetch available domains on mount
+  useEffect(() => {
+    const fetchDomains = async () => {
+      const domains = await getYopMailDomains();
+      setAvailableDomains(domains);
+    };
+    fetchDomains();
+  }, []);
+
   // Initialize or restore email
   useEffect(() => {
-    const stored = localStorage.getItem('yopmailAddress');
+    const initializeEmail = async () => {
+      const stored = localStorage.getItem('yopmailAddress');
+      
+      if (stored) {
+        setEmail(stored);
+        setYopmailUrl(getYopMailInboxUrl(stored));
+        
+        // Generate alternate email for stored address
+        const username = stored.split('@')[0];
+        const todayDomain = await getTodaysDomain();
+        const altEmail = `${username}@${todayDomain}`;
+        setAlternateEmail(altEmail);
+        setSelectedDomain(todayDomain);
+      } else {
+        generateNewEmail();
+      }
+    };
     
-    if (stored) {
-      setEmail(stored);
-      setYopmailUrl(getYopMailInboxUrl(stored));
-    } else {
-      generateNewEmail();
-    }
+    initializeEmail();
   }, [generateNewEmail]);
 
   // Auto-refresh countdown
@@ -177,6 +200,9 @@ export const useYopMail = () => {
 
   return {
     email,
+    alternateEmail,
+    selectedDomain,
+    availableDomains,
     messages,
     isLoading,
     autoRefreshSeconds,
@@ -189,5 +215,6 @@ export const useYopMail = () => {
     isConnected: true,
     yopmailUrl,
     openInbox,
+    changeDomain,
   };
 };

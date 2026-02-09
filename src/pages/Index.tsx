@@ -1,5 +1,14 @@
-import { RefreshCw, Mail, Copy, Clock, Inbox, ExternalLink } from 'lucide-react';
+import { RefreshCw, Mail, Copy, Clock, Inbox, ExternalLink, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useTempMail, Message } from '@/hooks/useTempMail';
 import { useYopMail } from '@/hooks/useYopMail';
 import { toast } from 'sonner';
@@ -29,6 +38,10 @@ const Index = () => {
 
   const yopmailUrl = version === 'v2' ? (yopMailHook as any).yopmailUrl : '';
   const openInbox = version === 'v2' ? (yopMailHook as any).openInbox : null;
+  const alternateEmail = version === 'v2' ? (yopMailHook as any).alternateEmail : null;
+  const selectedDomain = version === 'v2' ? (yopMailHook as any).selectedDomain : null;
+  const availableDomains = version === 'v2' ? (yopMailHook as any).availableDomains : [];
+  const changeDomain = version === 'v2' ? (yopMailHook as any).changeDomain : null;
 
   const [copied, setCopied] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
@@ -173,22 +186,15 @@ const Index = () => {
             <div className="p-2.5 rounded-lg" style={{ backgroundColor: 'rgba(201, 169, 98, 0.1)', border: '1px solid rgba(201, 169, 98, 0.2)' }}>
               <Mail className="w-5 h-5" style={{ color: '#c9a962' }} />
             </div>
-            <h2 className="text-lg" style={{ color: '#e8e0d5', fontFamily: 'Playfair Display, serif' }}>Your Temporary Email</h2>
+            <h2 className="text-lg" style={{ color: '#e8e0d5', fontFamily: 'Playfair Display, serif' }}>Your Temporary Email - Copy from Alternate</h2>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4">
-            {/* Email Input */}
+            {/* Email Input - Non-copyable */}
             <div className="flex-1 flex items-center gap-3 rounded-lg px-4 py-3" style={{ backgroundColor: '#1a1714', border: '1px solid #2d2a26' }}>
-              <span className="font-mono text-base flex-1 truncate" style={{ color: '#e8e0d5' }}>
+              <span className="font-mono text-base flex-1 truncate select-none" style={{ color: '#e8e0d5', userSelect: 'none' }}>
                 {email || 'Generating...'}
               </span>
-              <button
-                onClick={handleCopy}
-                className="p-1.5 rounded transition-colors hover:opacity-80"
-                aria-label="Copy email"
-              >
-                <Copy className="w-4 h-4" style={{ color: copied ? '#c9a962' : '#8a8279' }} />
-              </button>
             </div>
 
             {/* Actions */}
@@ -227,6 +233,94 @@ const Index = () => {
               </Button>
             </div>
           </div>
+
+          {/* Alternate Domain Section - YopMail Only */}
+          {version === 'v2' && alternateEmail && availableDomains.length > 0 && (
+            <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(45, 42, 38, 0.5)' }}>
+              <div className="mb-3">
+                <p className="text-xs leading-relaxed" style={{ color: '#8a8279' }}>
+                  Websites keep blocking disposable email addresses from time to time. So YopMail offers a list of alternate domains. So your temporary address will not be blacklisted by websites.
+                  <br />
+                  <span style={{ color: '#c9a962', fontWeight: '500' }}>One new domain name each day!</span>
+                  {' '}Change domain to create other accounts, click on "New Email" if no domain change works.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 rounded-lg px-4 py-3" style={{ backgroundColor: 'rgba(201, 169, 98, 0.15)', border: '1px solid rgba(201, 169, 98, 0.3)' }}>
+                <span className="text-xs uppercase tracking-wider shrink-0" style={{ color: '#8a8279' }}>
+                  Alternate domain:
+                </span>
+                <span className="font-mono text-sm shrink-0" style={{ color: '#e8e0d5' }}>
+                  {email?.split('@')[0]}
+                </span>
+                <Select value={selectedDomain || ''} onValueChange={changeDomain}>
+                  <SelectTrigger 
+                    className="h-8 w-[180px] font-mono text-sm border-none focus:ring-1"
+                    style={{ 
+                      backgroundColor: 'rgba(201, 169, 98, 0.2)', 
+                      color: '#e8e0d5',
+                      borderRadius: '6px'
+                    }}
+                  >
+                    <SelectValue placeholder="Select domain">
+                      @{selectedDomain}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent 
+                    className="max-h-[350px] overflow-y-auto"
+                    style={{ backgroundColor: '#211e1a', border: '1px solid #2d2a26' }}
+                  >
+                    {/* New Domain Group */}
+                    {selectedDomain && (
+                      <SelectGroup>
+                        <SelectLabel style={{ color: '#8a8279', fontSize: '10px', paddingLeft: '8px' }}>
+                          -- New --
+                        </SelectLabel>
+                        <SelectItem 
+                          key={selectedDomain} 
+                          value={selectedDomain}
+                          className="font-mono text-sm cursor-pointer focus:bg-[rgba(201,169,98,0.2)]"
+                          style={{ color: '#e8e0d5' }}
+                        >
+                          @{selectedDomain}
+                        </SelectItem>
+                      </SelectGroup>
+                    )}
+                    
+                    {/* Others Group */}
+                    <SelectGroup>
+                      <SelectLabel style={{ color: '#8a8279', fontSize: '10px', paddingLeft: '8px' }}>
+                        -- Others --
+                      </SelectLabel>
+                      {availableDomains
+                        .filter(domain => domain !== selectedDomain)
+                        .map((domain) => (
+                          <SelectItem 
+                            key={domain} 
+                            value={domain}
+                            className="font-mono text-sm cursor-pointer focus:bg-[rgba(201,169,98,0.2)]"
+                            style={{ color: '#e8e0d5' }}
+                          >
+                            @{domain}
+                          </SelectItem>
+                        ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <button
+                  onClick={() => {
+                    if (alternateEmail) {
+                      navigator.clipboard.writeText(alternateEmail);
+                      toast.success('Alternate email copied!');
+                    }
+                  }}
+                  className="p-1.5 rounded transition-colors hover:opacity-80 shrink-0 ml-auto"
+                  aria-label="Copy alternate email"
+                >
+                  <Copy className="w-4 h-4" style={{ color: '#c9a962' }} />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Status Row */}
           <div className="flex items-center justify-between mt-6 pt-4" style={{ borderTop: '1px solid rgba(45, 42, 38, 0.5)' }}>

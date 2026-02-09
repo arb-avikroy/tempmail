@@ -43,3 +43,16 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+
+## Features
+
+### YopMail Domain Rotation
+
+This application automatically fetches and rotates YopMail domains daily from the [YopMail email generator](https://yopmail.com/email-generator). 
+
+- **Daily Domain Updates**: The app fetches the latest "New" domain from YopMail each day
+- **Fallback Domains**: Includes a comprehensive list of 200+ alternate domains
+- **Smart Caching**: Domains are cached locally and refreshed once per day
+- **Avoid Blacklisting**: By using rotating domains, temporary email addresses are less likely to be blocked by websites
+
+The domain list is automatically fetched from YopMail's API and cached for optimal performance.
