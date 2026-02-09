@@ -67,7 +67,10 @@ interface DomainCache {
 }
 
 const CACHE_KEY = 'yopmail_domains_cache';
-const DOMAIN_API_URL = '/api/yopmail/domain?d=list'; // Use Vite proxy
+// Use Vite proxy in dev, absolute path in production
+const DOMAIN_API_URL = import.meta.env.DEV 
+  ? '/api/yopmail/domain?d=list' 
+  : 'https://temp-mail.adventurousinvestorhub.com/api/yopmail/domain?d=list';
 
 /**
  * Parse domains from YopMail's domain list HTML

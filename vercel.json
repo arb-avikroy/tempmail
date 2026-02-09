@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/yopmail/(.*)",
+      "destination": "/api/yopmail"
+    }
+  ]
+}
