@@ -1,12 +1,11 @@
 name = "yopmail-proxy"
-main = "worker/yopmail-proxy.js"
+main = "workers/yopmail-proxy.js"
 compatibility_date = "2024-01-01"
 
-# Route configuration - update with your domain
+# Configure routes for your custom domain
 routes = [
   { pattern = "temp-mail.adventurousinvestorhub.com/api/yopmail/*", zone_name = "adventurousinvestorhub.com" }
 ]
 
-# For development testing
-[env.dev]
-workers_dev = true
+# Optional: Configure for workers.dev subdomain (for testing)
+# workers_dev = true

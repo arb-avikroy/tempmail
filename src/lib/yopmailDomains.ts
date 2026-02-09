@@ -67,7 +67,7 @@ interface DomainCache {
 }
 
 const CACHE_KEY = 'yopmail_domains_cache';
-// Always use relative path - works in both dev (Vite proxy) and production (Vercel serverless)
+// Use relative path - works with both Vite dev proxy and Cloudflare Worker
 const DOMAIN_API_URL = '/api/yopmail/domain?d=list';
 
 /**
