@@ -67,8 +67,10 @@ interface DomainCache {
 }
 
 const CACHE_KEY = 'yopmail_domains_cache';
-// Use relative path - works with both Vite dev proxy and Cloudflare Worker
-const DOMAIN_API_URL = '/api/yopmail/domain?d=list';
+// Use Vite dev proxy in development, Cloudflare Worker in production
+const DOMAIN_API_URL = import.meta.env.DEV 
+  ? '/api/yopmail/domain?d=list' 
+  : 'https://yopmail-proxy.arb-avikroy.workers.dev/api/yopmail/domain?d=list';
 
 /**
  * Parse domains from YopMail's domain list HTML
