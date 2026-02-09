@@ -186,15 +186,29 @@ const Index = () => {
             <div className="p-2.5 rounded-lg" style={{ backgroundColor: 'rgba(201, 169, 98, 0.1)', border: '1px solid rgba(201, 169, 98, 0.2)' }}>
               <Mail className="w-5 h-5" style={{ color: '#c9a962' }} />
             </div>
-            <h2 className="text-lg" style={{ color: '#e8e0d5', fontFamily: 'Playfair Display, serif' }}>Your Temporary Email - Copy from Alternate</h2>
+            <h2 className="text-lg" style={{ color: '#e8e0d5', fontFamily: 'Playfair Display, serif' }}>
+              {version === 'v1' ? 'Your Temporary Email' : 'Your Temporary Email - Copy from Alternate'}
+            </h2>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4">
-            {/* Email Input - Non-copyable */}
+            {/* Email Input - V2: Non-copyable, V1: Normal with copy button */}
             <div className="flex-1 flex items-center gap-3 rounded-lg px-4 py-3" style={{ backgroundColor: '#1a1714', border: '1px solid #2d2a26' }}>
-              <span className="font-mono text-base flex-1 truncate select-none" style={{ color: '#e8e0d5', userSelect: 'none' }}>
+              <span 
+                className={`font-mono text-base flex-1 truncate ${version === 'v2' ? 'select-none' : ''}`}
+                style={{ color: '#e8e0d5', userSelect: version === 'v2' ? 'none' : 'auto' }}
+              >
                 {email || 'Generating...'}
               </span>
+              {version === 'v1' && (
+                <button
+                  onClick={handleCopy}
+                  className="p-1.5 rounded transition-colors hover:opacity-80"
+                  aria-label="Copy email"
+                >
+                  <Copy className="w-4 h-4" style={{ color: copied ? '#c9a962' : '#8a8279' }} />
+                </button>
+              )}
             </div>
 
             {/* Actions */}

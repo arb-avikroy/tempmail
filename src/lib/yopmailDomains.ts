@@ -1,6 +1,15 @@
 /**
  * YopMail Domain Rotation Utility
- * Fetches and rotates YopMail alternate domains daily
+ * 
+ * FETCH PRIORITY:
+ * 1. FIRST: Always attempts to fetch LIVE domains from YopMail API
+ * 2. FALLBACK: Only uses day-of-year rotation if API fetch fails
+ * 
+ * This ensures we always get the latest domains when possible,
+ * and gracefully fall back to 240+ hardcoded domains with daily rotation.
+ * 
+ * Note: Vite proxy works in development. In production, requests will fail
+ * and automatically use the fallback rotation system.
  */
 
 // Complete list of YopMail domains (manually updated from their API)
@@ -87,15 +96,6 @@ function parseDomains(html: string): { domains: string[]; newDomain: string | nu
     }
   }
 
-  console.log(`[YopMail] Parsed ${allDomains.length} domains (New: ${newDomain}, Others: ${otherDomains.length})`);
-
-  // Check if we got live data by looking for binich.com
-  if (newDomain === 'binich.com') {
-    console.log('✅ [YopMail] Using LIVE domains from YopMail API!');
-  } else {
-    console.log('⚠️ [YopMail] Using hardcoded/rotated domains');
-  }
-
   return { 
     domains: allDomains.length > 0 ? allDomains : ALL_YOPMAIL_DOMAINS, 
     newDomain: newDomain || null,
@@ -105,26 +105,23 @@ function parseDomains(html: string): { domains: string[]; newDomain: string | nu
 
 /**
  * Fetch domains from YopMail API via Vite proxy
+ * PRIORITY 1: Always tries to fetch live data from YopMail first
+ * PRIORITY 2: Falls back to day-of-year rotation only if fetch fails
  */
 async function fetchDomains(): Promise<{ domains: string[]; newDomain: string | null; otherDomains: string[] }> {
+  // STEP 1: Attempt to fetch live domains from YopMail
   try {
-    console.log('[YopMail] Fetching live domains from YopMail...');
     const response = await fetch(DOMAIN_API_URL);
     
     if (!response.ok) {
-      console.error('[YopMail] Fetch failed with status:', response.status);
       throw new Error(`Failed to fetch domains: ${response.status}`);
     }
     
     const html = await response.text();
-    console.log('[YopMail] Received HTML response, length:', html.length);
-    
     const parsed = parseDomains(html);
     
     // If parsing succeeded, return parsed data
     if (parsed.domains.length > 0 && parsed.newDomain) {
-      console.log(`✅ [YopMail] Successfully fetched ${parsed.domains.length} LIVE domains!`);
-      console.log(`✅ [YopMail] Today's featured domain: ${parsed.newDomain}`);
       return parsed;
     }
     
@@ -132,7 +129,7 @@ async function fetchDomains(): Promise<{ domains: string[]; newDomain: string | 
     throw new Error('No domains parsed');
     
   } catch (error) {
-    console.error('[YopMail] Error fetching domains, using rotation fallback:', error);
+    // STEP 2: Fallback to rotation (only if fetch/parse failed)
     
     // Fallback: Use day-of-year rotation
     const now = new Date();
@@ -150,8 +147,6 @@ async function fetchDomains(): Promise<{ domains: string[]; newDomain: string | 
     ];
     
     const otherDomains = rotatedDomains.slice(1);
-    
-    console.log(`[YopMail] Using fallback rotation (day ${dayOfYear}): ${newDomain}`);
     
     return { 
       domains: rotatedDomains, 
@@ -178,14 +173,12 @@ export async function getYopMailDomains(forceRefresh = false): Promise<string[]>
         }
       }
     } catch (error) {
-      console.error('Error reading domain cache:', error);
+      // Silent fail
     }
   }
 
   // Fetch fresh domains
   const { domains, newDomain, otherDomains } = await fetchDomains();
-  
-  console.log('[YopMail] getYopMailDomains returning', domains.length, 'domains');
   
   // Cache the result
   try {
@@ -197,7 +190,7 @@ export async function getYopMailDomains(forceRefresh = false): Promise<string[]>
     };
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
   } catch (error) {
-    console.error('Error caching domains:', error);
+    // Silent fail
   }
 
   return domains;
@@ -218,7 +211,7 @@ export async function getTodaysDomain(): Promise<string> {
       }
     }
   } catch (error) {
-    console.error('Error reading domain cache:', error);
+    // Silent fail
   }
 
   // Fetch fresh domains to get today's new domain
@@ -234,7 +227,7 @@ export async function getTodaysDomain(): Promise<string> {
     };
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
   } catch (error) {
-    console.error('Error caching domains:', error);
+    // Silent fail
   }
 
   // Return the new domain if available, otherwise use first from rotated list
