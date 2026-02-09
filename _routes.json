@@ -1,0 +1,9 @@
+{
+  "rules": [
+    {
+      "description": "Proxy YopMail API through Cloudflare Worker",
+      "pattern": "temp-mail.adventurousinvestorhub.com/api/yopmail/*",
+      "script": "yopmail-proxy"
+    }
+  ]
+}
